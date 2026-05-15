@@ -1,15 +1,16 @@
 {
   description = "NixOS developer environment for QGIS plugins.";
-
-  inputs.geospatial.url = "github:imincik/geospatial-nix.repo";
-  inputs.nixpkgs.follows = "geospatial/nixpkgs";
-
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+  };
   outputs =
     {
       self,
-      geospatial,
       nixpkgs,
-    }:
+      nixpkgs-unstable,
+      ...
+    }@inputs:
     let
       system = "x86_64-linux";
       profileName = "PLANET";
@@ -17,9 +18,12 @@
         inherit system;
         config = {
           allowUnfree = true;
-          permittedInsecurePackages = [
-            "qtwebengine-5.15.19"
-          ];
+        };
+      };
+      pkgs-unstable = import nixpkgs-unstable {
+        inherit system;
+        config = {
+          allowUnfree = true;
         };
       };
       extraPythonPackages-qgis3 = ps: [
@@ -32,33 +36,34 @@
         ps.debugpy
         ps.psutil
       ];
-      qgisWithExtras = geospatial.packages.${system}.qgis.override {
+      qgisWithExtras = pkgs-unstable.qgis.override {
         extraPythonPackages = extraPythonPackages-qgis4;
       };
-      qgisLtrWithExtras = geospatial.packages.${system}.qgis-ltr.override {
+      qgisLtrWithExtras = pkgs.qgis-ltr.override {
         extraPythonPackages = extraPythonPackages-qgis3;
       };
 
       # Common packages shared between all devShells (Qt-agnostic)
-      commonPackages = [
-        pkgs.chafa
-        pkgs.ffmpeg
-        pkgs.gdb
-        pkgs.git
-        pkgs.glow # terminal markdown viewer
-        pkgs.gource # Software version control visualization
-        pkgs.gum # UX for TUIs
-        pkgs.jq
-        pkgs.nixfmt-rfc-style
-        pkgs.pre-commit
-        pkgs.pyprof2calltree # needed to convert cprofile call trees into a format kcachegrind can read
-        pkgs.python3
-        pkgs.tailspin # Beautiful log tailing with syntax highlighting
-        pkgs.vim
-        pkgs.virtualenv
-        pkgs.vscode
-        pkgs.privoxy
-        (pkgs.python3.withPackages (ps: [
+      makeCommonPackages = p: [
+        p.chafa
+        p.ffmpeg
+        p.gdb
+        p.git
+        p.glow # terminal markdown viewer
+        p.gource # Software version control visualization
+        p.gum # UX for TUIs
+        p.jq
+        p.nixfmt
+        p.pre-commit
+        p.pyprof2calltree # needed to convert cprofile call trees into a format kcachegrind can read
+        p.python3
+        p.tailspin # Beautiful log tailing with syntax highlighting
+        p.uv # Fast python package installer written in Rust
+        p.vim
+        p.virtualenv
+        p.vscode
+        p.privoxy
+        (p.python3.withPackages (ps: [
           ps.python
           ps.pip
           ps.setuptools
@@ -75,13 +80,14 @@
           ps.toml
           ps.typer
           ps.paver
-          ps.pyqt5-stubs # For autocompletion in vscode
           ps.debugpy
           ps.numpy
           ps.gdal
           ps.snakeviz # For visualising cprofiler outputs
         ]))
       ];
+      commonPackages = makeCommonPackages pkgs;
+      commonPackages-unstable = makeCommonPackages pkgs-unstable;
 
       # Qt5 packages for QGIS 3 LTR development
       # Note: kcachegrind is only available in Qt6, use .#qt6 devShell for profiling
@@ -91,16 +97,24 @@
         pkgs.qt5.qtlocation
         pkgs.qt5.qtquickcontrols2
         pkgs.qt5.qtsvg
+        (pkgs.python3.withPackages (ps: [
+          ps.pyqt5
+          ps.pyqt5-stubs # For autocompletion in vscode
+        ]))
       ];
 
       # Qt6 packages for QGIS 4 development
       qt6Packages = [
-        pkgs.qt6.qtbase
-        pkgs.qt6.qttools # includes designer
-        pkgs.qt6.qtlocation
-        pkgs.qt6.qtdeclarative
-        pkgs.qt6.qtsvg
-        pkgs.kdePackages.kcachegrind
+        pkgs-unstable.qt6.qtbase
+        pkgs-unstable.qt6.qttools # includes designer
+        pkgs-unstable.qt6.qtlocation
+        pkgs-unstable.qt6.qtdeclarative
+        pkgs-unstable.qt6.qtsvg
+        pkgs-unstable.kdePackages.kcachegrind
+        (pkgs-unstable.python3.withPackages (ps: [
+          ps.pyqt6
+          ps.qscintilla-qt6
+        ]))
       ];
 
       commonShellHook = ''
@@ -124,6 +138,19 @@
           fi
         else
           echo "No requirements.txt found, skipping pip install."
+        fi
+
+        QGIS3_PLUGIN_DIR="$HOME/.local/share/QGIS/QGIS3/profiles/${profileName}/python/plugins"
+        QGIS4_PLUGIN_DIR="$HOME/.local/share/QGIS/QGIS4/profiles/${profileName}/python/plugins"
+
+        if [ ! -e "$QGIS3_PLUGIN_DIR/planet_explorer" ]; then
+          mkdir -p $QGIS3_PLUGIN_DIR
+          ln -s "$(pwd)/planet_explorer" "$QGIS3_PLUGIN_DIR/planet_explorer"
+        fi
+
+        if [ ! -e "$QGIS4_PLUGIN_DIR/planet_explorer" ]; then
+          mkdir -p $QGIS4_PLUGIN_DIR
+          ln -s "$(pwd)/planet_explorer" "$QGIS4_PLUGIN_DIR/planet_explorer"
         fi
 
         echo "-----------------------"
@@ -153,7 +180,6 @@
         echo "   ./scripts/privoxy.sh stop"
         echo "-----------------------"
         echo ""
-
         pre-commit clean > /dev/null
         pre-commit install --install-hooks > /dev/null
         pre-commit run --all-files || true
@@ -167,13 +193,35 @@
       };
 
       devShells.${system} = {
-        # Default devShell uses Qt5 for QGIS 3 LTR development (most stable)
-        default = pkgs.mkShell {
-          packages = commonPackages ++ qt5Packages;
+        # Default devShell uses Qt6 for QGIS 4 development
+        default = pkgs-unstable.mkShell {
+          packages = commonPackages-unstable ++ qt6Packages;
           shellHook = ''
-            echo "🔧 Using Qt5 devShell (for QGIS 3 LTR development)"
-            echo "   Use 'nix develop .#qt6' for QGIS 4/Qt6 development tools"
+            echo "🔧 Using Qt6 devShell (for QGIS 4 development)"
+            echo "   Use 'nix develop .#qt5' for QGIS 3 LTR development tools"
             echo ""
+            export QTPOSITIONING="${pkgs-unstable.python3Packages.pyqt6}/${pkgs-unstable.python3.sitePackages}"
+          ''
+          + commonShellHook;
+        };
+
+        # Qt6 devShell for QGIS 4 development
+        qt6 = pkgs-unstable.mkShell {
+          packages = commonPackages-unstable ++ qt6Packages;
+          shellHook = ''
+            echo "🔧 Using Qt6 devShell (for QGIS 4 development)"
+            echo ""
+            export QTPOSITIONING="${pkgs-unstable.python3Packages.pyqt6}/${pkgs-unstable.python3.sitePackages}"
+          ''
+          + commonShellHook;
+        };
+
+        pyqgis-qt6 = pkgs-unstable.mkShell {
+          packages = commonPackages-unstable ++ qt6Packages ++ [ qgisWithExtras ];
+          shellHook = ''
+            echo "🔧 Using PyQGIS and Qt6 devShell (for QGIS 4 development)"
+            echo ""
+            export PYTHONPATH="${qgisWithExtras}/share/qgis/python:${qgisWithExtras}/${pkgs-unstable.python3.sitePackages}:$PYTHONPATH"
           ''
           + commonShellHook;
         };
@@ -184,25 +232,16 @@
           shellHook = ''
             echo "🔧 Using Qt5 devShell (for QGIS 3 LTR development)"
             echo ""
+            export QTPOSITIONING="${pkgs.python3Packages.pyqt5}/${pkgs.python3.sitePackages}"
           ''
           + commonShellHook;
         };
 
-        # Qt6 devShell for QGIS 4 development
-        qt6 = pkgs.mkShell {
-          packages = commonPackages ++ qt6Packages;
-          shellHook = ''
-            echo "🔧 Using Qt6 devShell (for QGIS 4 development)"
-            echo ""
-          ''
-          + commonShellHook;
-        };
       };
-
       apps.${system} = {
         qgis = {
           type = "app";
-          program = "${pkgs.writeShellScript "qgis-with-profile" ''
+          program = "${pkgs-unstable.writeShellScript "qgis-with-profile" ''
             exec ${qgisWithExtras}/bin/qgis --profile ${profileName} "$@"
           ''}";
         };

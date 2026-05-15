@@ -14,6 +14,7 @@
 *                                                                         *
 ***************************************************************************
 """
+
 __author__ = "Planet Federal"
 __date__ = "August 2019"
 __copyright__ = "(C) 2019 Planet Inc, https://planet.com"
@@ -29,7 +30,7 @@ from qgis.core import Qgis, QgsApplication
 from qgis.PyQt import uic
 from qgis.PyQt.QtCore import pyqtSlot
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMenu, QVBoxLayout
+from qgis.PyQt.QtWidgets import QAction, QMenu, QVBoxLayout, QDialog
 
 from ..pe_analytics import (
     analytics_track,
@@ -55,12 +56,7 @@ log = logging.getLogger(__name__)
 LOG_VERBOSE = os.environ.get("PYTHON_LOG_VERBOSE", None)
 
 plugin_path = os.path.split(os.path.dirname(__file__))[0]
-WIDGET, BASE = uic.loadUiType(
-    os.path.join(plugin_path, "ui", "dailyimages_widget.ui"),
-    from_imports=True,
-    import_from=os.path.basename(plugin_path),
-    resource_suffix="",
-)
+WIDGET, BASE = uic.loadUiType(os.path.join(plugin_path, "ui", "dailyimages_widget.ui"))
 
 SEARCH_HIGHLIGHT = "QToolButton {color: rgb(16, 131, 138);}"
 
@@ -121,7 +117,7 @@ class DailyImagesWidget(BASE, WIDGET):
 
     def open_saved_searches(self, dlg=None):
         dlg = dlg if isinstance(dlg, OpenSavedSearchDialog) else OpenSavedSearchDialog()
-        if dlg.exec() == OpenSavedSearchDialog.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted:
             saved_search_request = dlg.saved_search
             request = {}
             if saved_search_request:
@@ -294,7 +290,7 @@ class DailyImagesWidget(BASE, WIDGET):
 
         if not self._sources:
             self.parent.show_message(
-                "No item types selected", level=Qgis.Warning, duration=10
+                "No item types selected", level=Qgis.MessageLevel.Warning, duration=10
             )
             return
 
@@ -391,7 +387,9 @@ class DailyImagesWidget(BASE, WIDGET):
 
         if not images:
             self.parent.show_message(
-                "No checked items to order", level=Qgis.Warning, duration=10
+                "No checked items to order",
+                level=Qgis.MessageLevel.Warning,
+                duration=10,
             )
             return
 
@@ -406,14 +404,14 @@ class DailyImagesWidget(BASE, WIDGET):
         dlg.setMinimumWidth(700)
         dlg.setMinimumHeight(750)
 
-        dlg.exec_()
+        dlg.exec()
 
     @pyqtSlot()
     def copy_checked_ids(self):
         selected = self.searchResultsWidget.selected_images()
         if not selected:
             self.parent.show_message(
-                "No checked IDs to copy", level=Qgis.Warning, duration=10
+                "No checked IDs to copy", level=Qgis.MessageLevel.Warning, duration=10
             )
             return
 
@@ -428,9 +426,11 @@ class DailyImagesWidget(BASE, WIDGET):
         if self.searchResultsWidget.search_has_been_performed():
             request = self.searchResultsWidget.request_query()
             dlg = ShowCurlDialog(request)
-            dlg.exec_()
+            dlg.exec()
         else:
-            self.parent.show_message("No search has been performed", level=Qgis.Warning)
+            self.parent.show_message(
+                "No search has been performed", level=Qgis.MessageLevel.Warning
+            )
 
     @pyqtSlot()
     def copy_api_key(self):

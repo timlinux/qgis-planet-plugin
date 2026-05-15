@@ -8,3 +8,4 @@ sentry-sdk
 monotonic
 backoff
 httpx
+PyQt6-stubs
