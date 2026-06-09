@@ -1,18 +1,16 @@
 import os
 
-from qgis.PyQt import uic
-
-from .pe_filters import filters_as_text_from_request, filters_from_request
-from .pe_legacy_warning_dialog import LegacyWarningDialog
-from .pe_gui_utils import waitcursor
-from ..pe_analytics import analytics_track, SAVED_SEARCH_ACCESSED
-from ..planet_api import PlanetClient
-from ..pe_utils import iface
-
-from qgis.PyQt.QtCore import QDateTime, Qt
-
 from qgis.core import Qgis
 from qgis.gui import QgsMessageBar
+from qgis.PyQt import uic
+from qgis.PyQt.QtCore import QDateTime, Qt
+
+from ..pe_analytics import SAVED_SEARCH_ACCESSED, analytics_track
+from ..pe_utils import iface
+from ..planet_api import PlanetClient
+from .pe_filters import filters_as_text_from_request, filters_from_request
+from .pe_gui_utils import waitcursor
+from .pe_legacy_warning_dialog import LegacyWarningDialog
 
 WIDGET, BASE = uic.loadUiType(
     os.path.join(
@@ -68,11 +66,17 @@ class OpenSavedSearchDialog(BASE, WIDGET):
             PlanetClient.getInstance().delete_search(request["id"])
             self.comboSavedSearch.removeItem(self.comboSavedSearch.currentIndex())
             self.bar.pushMessage(
-                "Delete search", "Search was correctly deleted", Qgis.Success, 5
+                "Delete search",
+                "Search was correctly deleted",
+                Qgis.MessageLevel.Success,
+                5,
             )
         else:
             self.bar.pushMessage(
-                "Delete search", "No search has been selected", Qgis.Warning, 5
+                "Delete search",
+                "No search has been selected",
+                Qgis.MessageLevel.Warning,
+                5,
             )
 
     def update_legacy_search(self):
@@ -122,12 +126,16 @@ class OpenSavedSearchDialog(BASE, WIDGET):
             tokens = []
             gte = filters[0]["config"].get("gte")
             if gte is not None:
-                tokens.append(QDateTime.fromString(gte, Qt.ISODate).date().toString())
+                tokens.append(
+                    QDateTime.fromString(gte, Qt.DateFormat.ISODate).date().toString()
+                )
             else:
                 tokens.append("---")
             lte = filters[0]["config"].get("lte")
             if lte is not None:
-                tokens.append(QDateTime.fromString(lte, Qt.ISODate).date().toString())
+                tokens.append(
+                    QDateTime.fromString(lte, Qt.DateFormat.ISODate).date().toString()
+                )
             else:
                 tokens.append("---")
             self.labelDateRange.setText(" / ".join(tokens))
@@ -149,5 +157,8 @@ class OpenSavedSearchDialog(BASE, WIDGET):
             self.accept()
         else:
             self.bar.pushMessage(
-                "Saved search", "No search has been selected", Qgis.Warning, 5
+                "Saved search",
+                "No search has been selected",
+                Qgis.MessageLevel.Warning,
+                5,
             )

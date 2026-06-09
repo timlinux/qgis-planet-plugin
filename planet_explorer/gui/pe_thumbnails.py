@@ -15,6 +15,7 @@
 *                                                                         *
 ***************************************************************************
 """
+
 __author__ = "Planet Federal"
 __date__ = "September 2019"
 __copyright__ = "(C) 2019 Planet Inc, https://planet.com"
@@ -24,12 +25,12 @@ __revision__ = "$Format:%H$"
 
 from collections import defaultdict
 
-from qgis.PyQt.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from qgis.core import QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsProject
 from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QImage, QPainter, QPixmap
+from qgis.PyQt.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 
-from ..pe_utils import qgsgeometry_from_geojson
+from ..pe_utils import log, qgsgeometry_from_geojson
 
 
 class ThumbnailManager:
@@ -47,7 +48,7 @@ class ThumbnailManager:
             self.nam.get(QNetworkRequest(QUrl(url)))
 
     def thumbnail_downloaded(self, reply):
-        if reply.error() == QNetworkReply.NoError:
+        if reply.error() == QNetworkReply.NetworkError.NoError:
             url = reply.url().toString()
             img = QImage()
             img.loadFromData(reply.readAll())
@@ -56,6 +57,7 @@ class ThumbnailManager:
                 try:
                     w.set_thumbnail(img)
                 except Exception:
+                    log("Error setting thumbnail for widget")
                     # the widget might have been deleted
                     pass
 
@@ -90,7 +92,7 @@ def createCompoundThumbnail(_bboxes, thumbnails):
     globalwidth = globalbox[2] - globalbox[0]
     globalheight = globalbox[3] - globalbox[1]
     pixmap = QPixmap(SIZE, SIZE)
-    pixmap.fill(Qt.transparent)
+    pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     try:
         for i, thumbnail in enumerate(thumbnails):

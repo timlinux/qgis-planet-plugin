@@ -3,8 +3,10 @@ requests-futures<1.0
 planet~=1.4
 iso8601
 mercantile
+six
 analytics-python
 sentry-sdk
 monotonic
 backoff
 httpx
+PyQt6-stubs==20250824

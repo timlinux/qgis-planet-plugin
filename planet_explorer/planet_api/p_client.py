@@ -14,6 +14,7 @@
 *                                                                         *
 ***************************************************************************
 """
+
 __author__ = "Planet Federal"
 __date__ = "August 2019"
 __copyright__ = "(C) 2019 Planet Inc, https://planet.com"
@@ -22,25 +23,23 @@ __copyright__ = "(C) 2019 Planet Inc, https://planet.com"
 __revision__ = "$Format:%H$"
 
 import gzip
+import json
+import logging
 import os
 import re
-import logging
-import random
-import json
-
+import secrets
 from typing import (
-    Optional,
     List,
+    Optional,
 )
-from qgis.PyQt.QtCore import pyqtSignal, pyqtSlot, QObject, QUrl, QMetaObject, Qt
-from PyQt5.QtNetwork import QNetworkRequest
-from qgis.core import Qgis, QgsBlockingNetworkRequest
 
 import requests
-
 from planet.api import ClientV1, auth
 from planet.api import models as api_models
 from planet.api.exceptions import APIException, InvalidIdentity
+from qgis.core import Qgis, QgsBlockingNetworkRequest
+from qgis.PyQt.QtCore import QMetaObject, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
+from qgis.PyQt.QtNetwork import QNetworkRequest
 
 from ..gui.pe_gui_utils import waitcursor
 
@@ -121,7 +120,7 @@ class QGISAdapter:
                 QMetaObject.invokeMethod(
                     PlanetClient.getInstance(),
                     "_show_offline_message",
-                    Qt.QueuedConnection,
+                    Qt.ConnectionType.QueuedConnection,
                 )
             if error == 1:
                 raise requests.exceptions.ConnectionError(msg)
@@ -135,7 +134,7 @@ class QGISAdapter:
             QMetaObject.invokeMethod(
                 PlanetClient.getInstance(),
                 "_clear_offline_message",
-                Qt.QueuedConnection,
+                Qt.ConnectionType.QueuedConnection,
             )
 
         content = breq.reply()
@@ -147,7 +146,9 @@ class QGISAdapter:
         if resp.headers.get("Content-Encoding") == "gzip":
             data = gzip.decompress(data)
         resp._content = data
-        resp.status_code = content.attribute(QNetworkRequest.HttpStatusCodeAttribute)
+        resp.status_code = content.attribute(
+            QNetworkRequest.Attribute.HttpStatusCodeAttribute
+        )
         return resp
 
 
@@ -193,7 +194,7 @@ class PlanetClient(QObject, ClientV1):
 
     @pyqtSlot()
     def _show_offline_message(self):
-        from ..pe_utils import iface, PLANET_COLOR
+        from ..pe_utils import PLANET_COLOR, iface
 
         if QGISAdapter._message_bar_item is None:
             msg = getattr(QGISAdapter, "_offline_msg", "Cannot access the internet.")
@@ -208,13 +209,14 @@ class PlanetClient(QObject, ClientV1):
                 )
             )
             iface.messageBar().pushWidget(
-                QGISAdapter._message_bar_item, Qgis.Warning, 0
+                QGISAdapter._message_bar_item, Qgis.MessageLevel.Warning, 0
             )
 
     @pyqtSlot()
     def _clear_offline_message(self):
+        from qgis.PyQt import sip
+
         from ..pe_utils import iface
-        import sip
 
         if QGISAdapter._message_bar_item is not None:
             try:
@@ -623,7 +625,7 @@ def tile_service_url(
         tile_url = TILE_SERVICE_URL.format("")
         url = f"{tile_url}/wmts/{tile_hash}?api_key={api_key}"
     elif service.lower() == "xyz":
-        tile_url = TILE_SERVICE_URL.format(random.randint(0, 3))
+        tile_url = TILE_SERVICE_URL.format(secrets.randbelow(4))
         url = (
             f"{tile_url}/{tile_hash}/{{z}}/{{x}}/{{y}}?"
             f"api_key={api_key}"
