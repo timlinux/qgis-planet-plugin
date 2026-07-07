@@ -1041,7 +1041,7 @@ class PlanetClient(QObject):
             dict[str, Any]: Description of the saved search.
 
         """
-        search = self.p_client.client.data.update_search(
+        search = self.client.data.update_search(
             search_id=search_id,
             item_types=request["item_types"],
             search_filter=request["filter"],
@@ -1062,7 +1062,7 @@ class PlanetClient(QObject):
 
         """
 
-        return self.p_client.client.data.create_search(
+        return self.client.data.create_search(
             item_types=request["item_types"],
             search_filter=request["search_filter"],
             name=request["name"],
