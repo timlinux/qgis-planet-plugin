@@ -359,7 +359,7 @@ class RangeSlider(QSlider):
 
         old_pressed = QStyle.SubControl(self.pressed_control)
         self.pressed_control = QStyle.SubControl.SC_None
-        self.setRepeatAction(self.SliderNoAction)
+        self.setRepeatAction(self.SliderAction.SliderNoAction)
         if old_pressed == QStyle.SubControl.SC_SliderHandle:
             self.setSliderDown(False)
         # opt = QStyleOptionSlider()

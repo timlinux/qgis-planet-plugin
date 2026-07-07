@@ -1061,10 +1061,9 @@ class PlanetClient(QObject):
             dict[str, Any]: Description of the saved search.
 
         """
-
         return self.client.data.create_search(
             item_types=request["item_types"],
-            search_filter=request["search_filter"],
+            search_filter=request["filter"],
             name=request["name"],
         )
 
