@@ -127,7 +127,7 @@ def setup():
     ext_libs.makedirs()
     os.environ["PYTHONPATH"] = ext_libs.abspath()
 
-    pure_python_reqs = read_requirements("requirements-pure-python.txt")
+    pure_python_reqs = read_requirements("requirements.txt")
     install_pure_dependencies(pure_python_reqs, ext_libs.abspath())
 
 
