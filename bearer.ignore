@@ -1,4 +1,15 @@
 {
+  "b4fb716998b6c8bb44cc0b51bced7132_0": {
+    "author": "Victoria Neema",
+    "comment": "Python command defined by sys.executable",
+    "false_positive": true,
+    "ignored_at": "2026-07-13T15:32:14Z"
+  },
+  "b4fb716998b6c8bb44cc0b51bced7132_1": {
+    "author": "Victoria Neema",
+    "false_positive": true,
+    "ignored_at": "2026-07-13T15:34:04Z"
+  },
   "b96ee51bac26b53bef2c0b7b35bad630_0": {
     "author": "Tim Sutton",
     "comment": "User must be able to download to a directory of their choosing.",
@@ -16,5 +27,17 @@
     "comment": "User must be able to download to a directory of their choosing.",
     "false_positive": true,
     "ignored_at": "2025-08-12T15:19:01Z"
+  },
+  "f4143a544302f50cc34156e584c8d864_0": {
+    "author": "Victoria Neema",
+    "comment": "\\",
+    "false_positive": true,
+    "ignored_at": "2026-07-13T11:56:05Z"
+  },
+  "f4143a544302f50cc34156e584c8d864_1": {
+    "author": "Victoria Neema",
+    "comment": "Python command defined by sys.executable",
+    "false_positive": true,
+    "ignored_at": "2026-07-13T11:56:41Z"
   }
 }

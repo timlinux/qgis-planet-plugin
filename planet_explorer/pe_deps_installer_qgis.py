@@ -90,7 +90,7 @@ class DependencyNoticeDialog(QDialog):
     required in QGIS's Python environment.
     """
 
-    def __init__(self, missing: list[str], parent=None, extlibs: str = None):
+    def __init__(self, missing: list[str], parent=None, extlibs: Path = None):
         super().__init__(parent)
         self.setWindowTitle("Additional dependencies required")
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -102,6 +102,8 @@ class DependencyNoticeDialog(QDialog):
         layout.setSpacing(12)
 
         extlibs_display = extlibs or "the plugin's dependency folder"
+        if isinstance(extlibs_display, Path):
+            extlibs_display = str(extlibs_display)
         label = QLabel(
             "This plugin requires the following Python packages, "
             "which are currently not installed in:\n"
@@ -245,16 +247,17 @@ class PipInstallWorker(QThread):
             self.finished_err.emit(str(e))
 
 
-def read_requirements(file_path: str) -> list[str]:
+def read_requirements(file_path: Path) -> list[str]:
     """
     Returns a list of runtime requirements
 
     Args:
-        file_path (str): File path to the requrements.txt file
+        file_path (Path): File path to the requrements.txt file
 
     Returns:
         list[str]: A list of runtime requirements
     """
+    file_path = Path(file_path).resolve()
     with open(file_path, "r") as f:
         lines = [ln.strip() for ln in f.readlines()]
     lines = [ln for ln in lines if ln and not ln.startswith("#")]
@@ -355,12 +358,13 @@ def ensure_deps_with_dialog(plugin_dir: str, parent_widget=None) -> bool:
     Returns:
         bool: True if dependencies are present/installed, False if failed/cancelled.
     """
-    extlibs = os.path.join(plugin_dir, "extlibs")
-    requirements_file = os.path.join(plugin_dir, "requirements.txt")
+    plugin_dir = Path(plugin_dir).resolve()
+    extlibs = plugin_dir.joinpath("extlibs")
+    requirements_file = plugin_dir.joinpath("requirements.txt")
 
     # Make extlibs importable first (for already-installed local deps)
-    if os.path.isdir(extlibs) and extlibs not in sys.path:
-        sys.path.insert(0, extlibs)
+    if extlibs.is_dir() and str(extlibs) not in sys.path:
+        sys.path.insert(0, str(extlibs))
 
     reqs = read_requirements(requirements_file)
     missing = missing_requirements(reqs)
@@ -375,8 +379,8 @@ def ensure_deps_with_dialog(plugin_dir: str, parent_widget=None) -> bool:
         result = _run_install_attempt(extlibs, reqs, parent_widget)
 
         if result["ok"]:
-            if extlibs not in sys.path:
-                sys.path.insert(0, extlibs)
+            if str(extlibs) not in sys.path:
+                sys.path.insert(0, str(extlibs))
             QMessageBox.information(
                 parent_widget, "Plugin setup", "Dependencies installed successfully."
             )
