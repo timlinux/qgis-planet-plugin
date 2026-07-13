@@ -200,7 +200,7 @@ def package(options):
     ext_libs = options.plugin.ext_libs
     ext_libs.rmtree()
     ext_libs.makedirs()
-    pure_python_reqs = read_requirements("requirements-pure-python.txt")
+    pure_python_reqs = read_requirements("requirements.txt")
     install_pure_dependencies(pure_python_reqs, ext_libs.abspath())
 
     package_file = options.plugin.package_dir / ("%s.zip" % options.plugin.name)
