@@ -5,7 +5,7 @@ RUN apt-get update \
     && apt-get install -y curl
 
 COPY ./requirements.txt /tmp/
-RUN apt remove -y python3-pytest python3-pip
+RUN apt remove -y python3-pytest python3-pip python3-typing-extensions
 # Install the freshes pip version so we can use the break-system-packages option
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py \
     && python3 get-pip.py --break-system-packages \
