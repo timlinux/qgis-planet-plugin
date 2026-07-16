@@ -1433,7 +1433,7 @@ class PlanetDailyFilter(DAILY_BASE, DAILY_WIDGET, PlanetFilterMixin):
             if chk.isChecked():
                 instruments.append(chk.property("api-name"))
         if instruments:
-            instrument_filter = string_in_filter("instrument", *instruments)
+            instrument_filter = string_in_filter("instrument", instruments)
             populated_filters.append(instrument_filter)
 
         server_filters = self._build_server_filters(populated_filters)

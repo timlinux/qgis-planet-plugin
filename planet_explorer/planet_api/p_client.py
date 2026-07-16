@@ -503,9 +503,12 @@ class PlanetClient(QObject):
             return False
 
         try:
+            # Session to use for raw async calls
             self.session = Session(self.auth)
             self.mosaics_client = self.session.client("mosaics")
-            self.client = Planet(self.session)
+            # Separate Session for the SDK's own sync wrapper
+            # to keep event loops seprate for async and sync calls
+            self.client = Planet(Session(self.auth))
             if self.runner is None:
                 self.runner = AsyncRunner()
             return True
