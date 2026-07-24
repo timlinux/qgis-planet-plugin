@@ -41,11 +41,12 @@ class LoginWorker(QThread):
         hence tracking is only available in running
         QGIS GUI session.
         """
-        user_email = self.p_client.get_user_info()["email"]
+
         if is_sentry_dsn_valid():
             with sentry_sdk.configure_scope() as scope:
+                user_email = self.p_client.user()["email"]
                 scope.user = {"email": user_email}
-        analytics_track(USER_LOGIN, user_email)
+        analytics_track(USER_LOGIN)
 
     def run(self):
         if self.clean_session:

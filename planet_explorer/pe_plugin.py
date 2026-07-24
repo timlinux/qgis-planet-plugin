@@ -649,7 +649,9 @@ class PlanetExplorer(object):
                 action.setToolTip(login_tip if loggedin else logout_tip)
 
         self.user_button.setEnabled(loggedin)
-        self.user_button.setText("Logged in" if loggedin else "")
+        self.user_button.setText(
+            PlanetClient.getInstance().user()["user_name"] if loggedin else ""
+        )
 
     def project_saved(self):
         # TODO: Remove API keys from QGIS project file after saving, if any

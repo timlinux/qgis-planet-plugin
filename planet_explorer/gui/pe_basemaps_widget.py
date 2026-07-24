@@ -404,7 +404,6 @@ class BasemapsWidget(BASE, WIDGET):
     def explore(self):
         if self._check_has_items_checked():
             selected = self.mosaicsList.selected_mosaics()
-
             analytics_track(BASEMAP_SERVICE_ADDED_TO_MAP)
 
             add_mosaics_to_qgis_project(

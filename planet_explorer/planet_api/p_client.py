@@ -320,6 +320,7 @@ class PlanetClient(QObject):
         self.auth = None
         self.token_file_path = None
         self.auth_storage_dir = None
+        self.userinfo = None
         self.session = None
         self.mosaics_client = None
         self.client = None
@@ -393,7 +394,11 @@ class PlanetClient(QObject):
                     # Required for both EMAIL and PROFILE
                     PlanetOAuthScopes.OPENID,
                     # Required for user profile information
-                    # PlanetOAuthScopes.PROFILE,
+                    PlanetOAuthScopes.PROFILE,
+                    # Note: Sometimes just email scope
+                    # is enough to get the email and first and last name
+                    # but other times profile is needed. Put profile
+                    # scope also as failsafe.
                     # Request the user's email address
                     PlanetOAuthScopes.EMAIL,
                 ],
@@ -412,23 +417,6 @@ class PlanetClient(QObject):
             self.auth_storage_dir = self.token_file_path.parent
         return self.auth
 
-    def get_user_info(self) -> dict[str, Any]:
-        """
-        Look up user information for the currentllogged in user.
-        Look up is performed by querying the authorization server
-        using the current access token.
-
-        Returns:
-            dict[str, Any]: User information such as email.
-        """
-        saved_token = FileBackedOidcCredential(None, self.token_file_path)
-        saved_token.load()
-        auth_client = self.auth._plauth.auth_client()
-        userinfo_json = auth_client.userinfo_from_access_token(
-            saved_token.access_token()
-        )
-        return {"email": userinfo_json["email"]}
-
     @waitcursor
     def complete_log_in(self, login_info):
         """Complete the OAuth device code login flow and initialize the client.
@@ -445,6 +433,8 @@ class PlanetClient(QObject):
             self.auth.device_user_login_complete(login_info)
 
         self.build_engines()
+
+        self.user()
 
         # WARNING: Use of API Keys is strongly discouraged in v3 of the
         # planet sdk but required here for tile urls to be added
@@ -485,6 +475,7 @@ class PlanetClient(QObject):
         self.auth = None
         self.token_file_path = None
         self.auth_storage_dir = None
+        self.userinfo = None
         self.session = None
         self.mosaics_client = None
         self.client = None
@@ -545,11 +536,63 @@ class PlanetClient(QObject):
             self.client = Planet(Session(self.auth))
             if self.runner is None:
                 self.runner = AsyncRunner()
+            log.info("Client engine instances built successfully.")
             return True
         except Exception as e:
             log.error(f"Failed to assemble client engine instances: {str(e)}")
             self.log_out()  # Clean up half-baked state safely
             return False
+
+    def get_user_info(self) -> dict[str, Any] | None:
+        """
+        Look up user information for the currently logged in user.
+        Look up is performed by querying the authorization server
+        using the current access token.
+
+        Returns:
+            dict[str, Any] | None: User info if look up is successful and
+                None if lookup is not successful.
+        """
+        if not self.auth_is_valid():
+            log.warning(
+                "Cannot get user info: Authentication context is missing or invalid."
+            )
+            return None
+
+        saved_token = FileBackedOidcCredential(None, self.token_file_path)
+        saved_token.load()
+        auth_client = self.auth._plauth.auth_client()
+        userinfo_json = auth_client.userinfo_from_access_token(
+            saved_token.access_token()
+        )
+        return userinfo_json
+
+    def user(self) -> dict[str, Any]:
+        """
+        Get user information for the currently logged in user
+        and setup self.userinfo class attribute.
+
+        Returns:
+            info: dict[str, Any]: User information including email.
+        """
+        if self.userinfo is None:
+            info = self.get_user_info()
+            if info is not None:
+                self.userinfo = {
+                    "email": info["email"],
+                    "last_name": info["last_name"],
+                    "first_name": info["first_name"],
+                    # If not using profile scope and only using email scope
+                    # "user_name": f'{info["first_name"]} {info["last_name"]}',
+                    # If using profile scope
+                    "user_name": info["name"],
+                }
+                log.info(
+                    f'User name: {self.userinfo["user_name"]} \n User email: {self.userinfo["email"]}'
+                )
+            else:
+                self.userinfo = None
+        return self.userinfo
 
     async def _aget_one_mosaic(
         self, raise_on_error: bool = False

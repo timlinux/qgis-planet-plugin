@@ -30,6 +30,8 @@ import analytics
 
 from planet_explorer.pe_utils import log
 
+from .planet_api import PlanetClient
+
 ITEM_TYPE = "item_type"
 ITEM_TYPES = "item_types"
 NAME = "name"
@@ -94,11 +96,13 @@ def is_sentry_dsn_valid():
     return sentry_dsn() is not None
 
 
-def analytics_track(event, user_email: str, properties=None):
+def analytics_track(event, properties=None):
     properties = properties or {}
     if is_segments_write_key_valid():
         try:
-            analytics.track(user_email, event, properties)
+            # analytics.track(user_email, event, properties)
+            user = PlanetClient.getInstance().user()["email"]
+            analytics.track(user, event, properties)
         except Exception:
             log(f"Error tracking event {event} with properties {properties}")
             pass
