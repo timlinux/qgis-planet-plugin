@@ -1,7 +1,7 @@
 #!make
 SHELL := /usr/bin/env bash
 
-# This Makefile  is intended for use with the Nix \
+# This Makefile is intended for use with the Nix \
 development environment defined in the flake.nix
 
 activate-env:
@@ -45,22 +45,22 @@ start-qgis-ltr:
 	scripts/start_qgis_ltr.sh
 
 start-jupyterlab:
-    nohup jupyter lab --port 8888 --no-browser > jupyter.log 2>&1 &
-    @echo "Jupyter Lab started with PID: $$!"
-    @echo "View logs: tail -f jupyter.log"
+	nohup jupyter lab --port 8888 --no-browser > jupyter.log 2>&1 &
+	@echo "Jupyter Lab started with PID: $$!"
+	@echo "View logs: tail -f jupyter.log"
 
 stop-jupyterlab:
-    pkill -f "jupyter lab"
-     @echo "Jupyter Lab stopped"
+	pkill -f "jupyter lab"
+	@echo "Jupyter Lab stopped"
 
 logs-jupyterlab:
-    tail -f jupyter.log
+	tail -f jupyter.log
 
 status-jupyterlab:
-    ps aux | grep jupyter | grep -v grep
+	ps aux | grep jupyter | grep -v grep
 
 link-notebooks:
-     ln -s ../planet-draft-notebooks testnotebooks
+	ln -s ../planet-draft-notebooks testnotebooks
 
 run-pre-commit:
 	@echo "Running pre-commit checks..."
