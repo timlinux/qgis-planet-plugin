@@ -32,6 +32,21 @@ class LoginWorker(QThread):
         self.token_exists = token_exists
         self.clean_session = clean_session
 
+    def setup_analytics(self):
+        """
+        Setup sentry and analytics tracking
+
+        Note: This is done here instead of in
+        the planet client to avoid circular imports
+        hence tracking is only available in running
+        QGIS GUI session.
+        """
+        user_email = self.p_client.get_user_info()["email"]
+        if is_sentry_dsn_valid():
+            with sentry_sdk.configure_scope() as scope:
+                scope.user = {"email": user_email}
+        analytics_track(USER_LOGIN, user_email)
+
     def run(self):
         if self.clean_session:
             try:
@@ -47,14 +62,7 @@ class LoginWorker(QThread):
         if self.token_exists and not self.clean_session:
             try:
                 self.p_client.complete_log_in(None)
-                # Setup analytics tracking at this point
-                # instead of in the planet client itself
-                # to avoid circular imports
-                user_email = self.p_client.get_user_info()["email"]
-                if is_sentry_dsn_valid():
-                    with sentry_sdk.configure_scope() as scope:
-                        scope.user = {"email": user_email}
-                analytics_track(USER_LOGIN, user_email)
+                self.setup_analytics()
                 self.finished_signal.emit(True, "Success")
             except Exception as e:
                 self.finished_signal.emit(
@@ -63,14 +71,7 @@ class LoginWorker(QThread):
         else:
             try:
                 self.p_client.complete_log_in(self.login_info)
-                # Setup analytics tracking at this point
-                # instead of in the planet client itself
-                # to avoid circular imports
-                user_email = self.p_client.get_user_info()["email"]
-                if is_sentry_dsn_valid():
-                    with sentry_sdk.configure_scope() as scope:
-                        scope.user = {"email": user_email}
-                analytics_track(USER_LOGIN, user_email)
+                self.setup_analytics()
                 self.finished_signal.emit(True, "Success")
             except Exception as e:
                 self.finished_signal.emit(False, str(e))
