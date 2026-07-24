@@ -39,7 +39,7 @@ import requests
 from planet import Auth, PlanetOAuthScopes, Session
 from planet.exceptions import InvalidAPIKey, InvalidIdentity
 from planet.sync.client import Planet
-from planet_auth import FileBackedOidcCredential
+from planet_auth import FileBackedOidcCredential, TokenValidator
 from planet_auth.storage_utils import _SOPSAwareFilesystemObjectStorageProvider
 from qgis.core import Qgis, QgsApplication, QgsBlockingNetworkRequest
 from qgis.PyQt.QtCore import QMetaObject, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
@@ -593,6 +593,44 @@ class PlanetClient(QObject):
             else:
                 self.userinfo = None
         return self.userinfo
+
+    def get_access_token(self) -> str:
+        """
+        Get the OAuth2 jwt access token as string.
+
+        Returns:
+            str: Access token as string.
+        """
+        saved_token = FileBackedOidcCredential(None, self.token_file_path)
+        saved_token.load()
+        return saved_token.access_token()
+
+    def get_api_key(self) -> str:
+        """
+        Decode the API key from the OAUTH2 access token.
+
+        Returns:
+            str: API key if decode is successful.
+        """
+        # TODO: Work around needed for QGIS to be able to authenticate
+        # a tile service url using the planet auth object.
+
+        hazmat_header, hazmat_body, hazmat_signature = (
+            TokenValidator.hazmat_unverified_decode(self.get_access_token())
+        )
+        return hazmat_body["api_key"]
+
+    def has_api_key(self) -> bool:
+        """
+        Check if the Planet Client instance has the api key
+        setup.
+
+        Returns:
+            bool: True if api_key attribute exists and is not None.
+        """
+        if hasattr(self, "api_key"):
+            return self.api_key not in [None, "", API_KEY_DEFAULT]
+        return False
 
     async def _aget_one_mosaic(
         self, raise_on_error: bool = False
@@ -1339,30 +1377,6 @@ class PlanetClient(QObject):
         Example usage: self._post(url, json_data={"key": "value"}, minimal=True, page_size=50)
         """
         return self.runner.run(self._apost(url, json_data, params))
-
-    @verify_mosaics_client
-    @verify_async_runner
-    def get_api_key(self):
-        # WARNING: This is a very hacky way to get the api key
-        # for the tile service url for QGIS.
-        # TODO: Work around needed for QGIS to be able to authenticate
-        # a tile service url using the planet auth object.
-        if self.has_access_to_mosaics():
-            first_mosaic = self.runner.run(self._aget_one_mosaic())
-            tile_url = first_mosaic["_links"]["tiles"]
-            api_key = tile_url.split("?")[-1].strip("api_key=")
-            return api_key
-        else:
-
-            # TODO: API Key if user only has access to daily imagery
-            pass
-
-        return ""
-
-    def has_api_key(self):
-        if hasattr(self, "api_key"):
-            return self.api_key not in [None, "", API_KEY_DEFAULT]
-        return False
 
     async def _aget_stats(self, request: dict[str, Any]) -> dict:
         url = "https://api.planet.com/data/v1/stats"
