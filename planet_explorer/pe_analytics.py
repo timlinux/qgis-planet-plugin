@@ -94,17 +94,11 @@ def is_sentry_dsn_valid():
     return sentry_dsn() is not None
 
 
-def analytics_track(event, properties=None):
+def analytics_track(event, user_email: str, properties=None):
     properties = properties or {}
     if is_segments_write_key_valid():
         try:
-            # NOTE: v3 Oauth workflow does not provide access
-            # to the email address of the user, so we use "anonymous"
-            # for now.
-            # TODO: Workaround to get user email
-            # user = PlanetClient.getInstance().user()["email"]
-            user = "anonymous"
-            analytics.track(user, event, properties)
+            analytics.track(user_email, event, properties)
         except Exception:
             log(f"Error tracking event {event} with properties {properties}")
             pass

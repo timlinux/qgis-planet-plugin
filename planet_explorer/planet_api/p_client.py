@@ -39,6 +39,7 @@ import requests
 from planet import Auth, PlanetOAuthScopes, Session
 from planet.exceptions import InvalidAPIKey, InvalidIdentity
 from planet.sync.client import Planet
+from planet_auth import FileBackedOidcCredential
 from planet_auth.storage_utils import _SOPSAwareFilesystemObjectStorageProvider
 from qgis.core import Qgis, QgsApplication, QgsBlockingNetworkRequest
 from qgis.PyQt.QtCore import QMetaObject, QObject, Qt, QUrl, pyqtSignal, pyqtSlot
@@ -58,7 +59,10 @@ QUOTA_URL = "https://api.planet.com/auth/v1/experimental" "/public/my/subscripti
 
 TILE_SERVICE_URL = "https://tiles{0}.planet.com/data/v1/layers"
 
+# from planet.auth_builtins import _SDK_CLIENT_ID_PROD
+# CLIENT_ID = _SDK_CLIENT_ID_PROD
 CLIENT_ID = "v4diVLw0ykprJeGEybxt3aiOVSwMVvjC"
+
 PROFILE_NAME = "planet-qgis-plugin"
 
 API_KEY_DEFAULT = "SKIP_ENVIRON"
@@ -249,7 +253,7 @@ class QGISProfileStorageProvider(_SOPSAwareFilesystemObjectStorageProvider):
     def __init__(self):
         active_profile_dir = QgsApplication.qgisSettingsDirPath()
         if not bool(active_profile_dir):
-            planet_auth_dir = Path.home() / ".planet"
+            planet_auth_dir = Path.home()
             log.info(f"Using default Planet auth storage directory: {planet_auth_dir}")
         else:
             planet_auth_dir = Path(active_profile_dir)
@@ -314,6 +318,7 @@ class PlanetClient(QObject):
         self.api_key = None
         self.auth_storage_provider = None
         self.auth = None
+        self.token_file_path = None
         self.auth_storage_dir = None
         self.session = None
         self.mosaics_client = None
@@ -385,16 +390,44 @@ class PlanetClient(QObject):
                     PlanetOAuthScopes.PLANET,
                     # Request a refresh token so repeated browser logins are not required
                     PlanetOAuthScopes.OFFLINE_ACCESS,
+                    # Required for both EMAIL and PROFILE
+                    PlanetOAuthScopes.OPENID,
+                    # Required for user profile information
+                    # PlanetOAuthScopes.PROFILE,
+                    # Request the user's email address
+                    PlanetOAuthScopes.EMAIL,
                 ],
                 profile_name=PROFILE_NAME,
                 save_state_to_storage=True,
                 storage_provider=self.auth_storage_provider,
             )
-        if not self.auth_storage_dir:
-            self.auth_storage_dir = (
-                self.auth_storage_provider._storage_root / PROFILE_NAME
+        if not self.token_file_path:
+            # Setting this here for easy retrieval
+            # of user info or email
+            self.token_file_path = self.auth_storage_provider._obj_filepath(
+                self.auth._plauth.token_file_path()
             )
+        if not self.auth_storage_dir:
+            # Exposing this here for management in pe_auth_dialog.py
+            self.auth_storage_dir = self.token_file_path.parent
         return self.auth
+
+    def get_user_info(self) -> dict[str, Any]:
+        """
+        Look up user information for the currentllogged in user.
+        Look up is performed by querying the authorization server
+        using the current access token.
+
+        Returns:
+            dict[str, Any]: User information such as email.
+        """
+        saved_token = FileBackedOidcCredential(None, self.token_file_path)
+        saved_token.load()
+        auth_client = self.auth._plauth.auth_client()
+        userinfo_json = auth_client.userinfo_from_access_token(
+            saved_token.access_token()
+        )
+        return {"email": userinfo_json["email"]}
 
     @waitcursor
     def complete_log_in(self, login_info):
@@ -450,6 +483,7 @@ class PlanetClient(QObject):
         self.api_key = None
         self.auth_storage_provider = None
         self.auth = None
+        self.token_file_path = None
         self.auth_storage_dir = None
         self.session = None
         self.mosaics_client = None

@@ -277,11 +277,8 @@ class PlanetExplorer(object):
         icon_path,
         text,
         callback,
-        enabled_flag=True,
         add_to_menu=True,
         add_to_toolbar=True,
-        status_tip=None,
-        whats_this=None,
         parent=None,
     ):
         """Add a toolbar icon to the toolbar.
@@ -292,16 +289,10 @@ class PlanetExplorer(object):
                 path.
             text (str): Text shown in menu items for this action.
             callback (function): Function called when the action is triggered.
-            enabled_flag (bool): Whether the action should be enabled by default.
-                Defaults to True.
             add_to_menu (bool): Whether the action should also be added to the
                 menu. Defaults to True.
             add_to_toolbar (bool): Whether the action should also be added to the
                 toolbar. Defaults to True.
-            status_tip (str): Optional text to show in a popup when the mouse
-                pointer hovers over the action.
-            whats_this (str): Optional text to show in the status bar when the
-                mouse pointer hovers over the action.
             parent (QWidget): Parent widget for the new action. Defaults to None.
 
         Returns:

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import shutil
 
+import sentry_sdk
 from qgis.PyQt.QtCore import QCoreApplication, QThread, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
@@ -12,6 +13,7 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..pe_analytics import USER_LOGIN, analytics_track, is_sentry_dsn_valid
 from ..pe_utils import open_link_with_browser
 from ..planet_api.p_client import PlanetClient
 
@@ -45,6 +47,14 @@ class LoginWorker(QThread):
         if self.token_exists and not self.clean_session:
             try:
                 self.p_client.complete_log_in(None)
+                # Setup analytics tracking at this point
+                # instead of in the planet client itself
+                # to avoid circular imports
+                user_email = self.p_client.get_user_info()["email"]
+                if is_sentry_dsn_valid():
+                    with sentry_sdk.configure_scope() as scope:
+                        scope.user = {"email": user_email}
+                analytics_track(USER_LOGIN, user_email)
                 self.finished_signal.emit(True, "Success")
             except Exception as e:
                 self.finished_signal.emit(
@@ -53,6 +63,14 @@ class LoginWorker(QThread):
         else:
             try:
                 self.p_client.complete_log_in(self.login_info)
+                # Setup analytics tracking at this point
+                # instead of in the planet client itself
+                # to avoid circular imports
+                user_email = self.p_client.get_user_info()["email"]
+                if is_sentry_dsn_valid():
+                    with sentry_sdk.configure_scope() as scope:
+                        scope.user = {"email": user_email}
+                analytics_track(USER_LOGIN, user_email)
                 self.finished_signal.emit(True, "Success")
             except Exception as e:
                 self.finished_signal.emit(False, str(e))
