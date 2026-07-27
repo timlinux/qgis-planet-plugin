@@ -182,7 +182,6 @@ class PlanetInspectorDockWidget(ORDERS_MONITOR_BASE, ORDERS_MONITOR_WIDGET):
                 self.textBrowser.setVisible(False)
                 self.listScenes.setVisible(True)
             except Exception as e:
-                raise e
                 self.textBrowser.setHtml(
                     """
                         <center><span style="color: rgb(200,0,0);">
