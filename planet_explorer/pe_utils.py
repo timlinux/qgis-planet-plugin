@@ -159,7 +159,7 @@ def qgsrectangle_for_canvas_from_4326_bbox_coords(coords: tuple) -> QgsRectangle
         QgsRectangle: Transformed rectangle in the current project's CRS.
     """
     transform = QgsCoordinateTransform(
-        QgsCoordinateReferenceSystem("EPSG:4326"),
+        QgsCoordinateReferenceSystem.fromEpsgId(4326),
         QgsProject.instance().crs(),
         QgsProject.instance(),
     )
@@ -541,7 +541,7 @@ def zoom_canvas_to_geometry(geom: QgsGeometry):
         geom (QgsGeometry): Geometry in EPSG:4326 to zoom to.
     """
     transform = QgsCoordinateTransform(
-        QgsCoordinateReferenceSystem("EPSG:4326"),
+        QgsCoordinateReferenceSystem.fromEpsgId(4326),
         QgsProject.instance().crs(),
         QgsProject.instance(),
     )

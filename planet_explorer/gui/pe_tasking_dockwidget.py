@@ -76,12 +76,12 @@ class AOICaptureMapTool(QgsMapTool):
         pt = event.mapPoint()
         transform3857 = QgsCoordinateTransform(
             QgsProject.instance().crs(),
-            QgsCoordinateReferenceSystem("EPSG:3857"),
+            QgsCoordinateReferenceSystem.fromEpsgId(3857),
             QgsProject.instance(),
         )
         transform4326 = QgsCoordinateTransform(
             QgsProject.instance().crs(),
-            QgsCoordinateReferenceSystem("EPSG:4326"),
+            QgsCoordinateReferenceSystem.fromEpsgId(4326),
             QgsProject.instance(),
         )
         pt4326 = transform4326.transform(pt)
@@ -186,7 +186,7 @@ class TaskingDockWidget(BASE, WIDGET):
         self.rect = rect
         self.footprint.setToGeometry(QgsGeometry.fromRect(rect))
         transform = QgsCoordinateTransform(
-            QgsCoordinateReferenceSystem("EPSG:4326"),
+            QgsCoordinateReferenceSystem.fromEpsgId(4326),
             QgsProject.instance().crs(),
             QgsProject.instance(),
         )
