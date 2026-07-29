@@ -65,8 +65,6 @@ CLIENT_ID = "v4diVLw0ykprJeGEybxt3aiOVSwMVvjC"
 
 PROFILE_NAME = "planet-qgis-plugin"
 
-API_KEY_DEFAULT = "SKIP_ENVIRON"
-
 T = TypeVar("T")
 
 
@@ -315,7 +313,6 @@ class PlanetClient(QObject):
         self.base_url = "https://api.planet.com"
 
         # Login
-        self.api_key = None
         self.auth_storage_provider = None
         self.auth = None
         self.token_file_path = None
@@ -336,7 +333,6 @@ class PlanetClient(QObject):
         self._item_types = None
         self._bundles = None
         self._asset_types = {}
-        # self.dispatcher.session.mount("https://", QGISAdapter())
 
     @pyqtSlot()
     def _show_offline_message(self):
@@ -436,13 +432,6 @@ class PlanetClient(QObject):
 
         self.user()
 
-        # WARNING: Use of API Keys is strongly discouraged in v3 of the
-        # planet sdk but required here for tile urls to be added
-        # to QGIS.
-        # TODO: Find work around for tile urls and remove
-        # this.
-        self.api_key = self.get_api_key()
-
         self.update_user_quota()
 
         if old_session != self.session:
@@ -470,7 +459,6 @@ class PlanetClient(QObject):
         """
         old_session = self.session
 
-        self.api_key = None
         self.auth_storage_provider = None
         self.auth = None
         self.token_file_path = None
@@ -482,8 +470,7 @@ class PlanetClient(QObject):
         if self.runner is not None:
             self.runner.close()
             self.runner = None
-        # TODO: full logout , file should go into QGIS profile in use
-        # auth should revoke token server side and delete file
+        # TODO: find if auth should revoke token server side and delete file
         if old_session != self.session:
             self.loginChanged.emit(False)
 
@@ -532,7 +519,7 @@ class PlanetClient(QObject):
             self.session = Session(self.auth)
             self.mosaics_client = self.session.client("mosaics")
             # Separate Session for the SDK's own sync wrapper
-            # to keep event loops seprate for async and sync calls
+            # to keep event loops separate for async and sync calls
             self.client = Planet(Session(self.auth))
             if self.runner is None:
                 self.runner = AsyncRunner()
@@ -614,7 +601,6 @@ class PlanetClient(QObject):
         """
         # TODO: Work around needed for QGIS to be able to authenticate
         # a tile service url using the planet auth object.
-
         hazmat_header, hazmat_body, hazmat_signature = (
             TokenValidator.hazmat_unverified_decode(self.get_access_token())
         )
@@ -629,7 +615,7 @@ class PlanetClient(QObject):
             bool: True if api_key attribute exists and is not None.
         """
         if hasattr(self, "api_key"):
-            return self.api_key not in [None, "", API_KEY_DEFAULT]
+            return self.api_key not in [None, ""]
         return False
 
     async def _aget_one_mosaic(
@@ -1473,8 +1459,6 @@ def tile_service_url(
         The tile service URL string, or ``None`` if a hash could not be
         obtained or no IDs were provided.
     """
-    p_client = PlanetClient.getInstance()
-
     if not tile_hash:
         if not item_type_ids:
             log.debug("No item type:ids passed, skipping tile URL")
@@ -1490,14 +1474,10 @@ def tile_service_url(
     url = None
     if service.lower() == "wmts":
         tile_url = TILE_SERVICE_URL.format("")
-        url = f"{tile_url}/wmts/{tile_hash}?api_key={p_client.api_key}"
+        url = f"{tile_url}/wmts/{tile_hash}"
     elif service.lower() == "xyz":
         tile_url = TILE_SERVICE_URL.format(secrets.choice([0, 1, 2, 3]))
-        url = (
-            f"{tile_url}/{tile_hash}/{{z}}/{{x}}/{{y}}?"
-            f"api_key={p_client.api_key}"
-            f"&ua={user_agent()}"
-        )
+        url = f"{tile_url}/{tile_hash}/{{z}}/{{x}}/{{y}}" f"?ua={user_agent()}"
 
     return url
 
