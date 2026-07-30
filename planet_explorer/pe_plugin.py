@@ -48,6 +48,7 @@ from qgis.PyQt.QtCore import (
 from qgis.PyQt.QtGui import QDesktopServices, QIcon, QPalette
 from qgis.PyQt.QtWidgets import (
     QAction,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QMenu,
@@ -604,12 +605,12 @@ class PlanetExplorer(object):
             self.auth_dialog_window = PlanetAuthenticationDialog(
                 self.iface.mainWindow()
             )
-            self.auth_dialog_window.exec()
-
+            result = self.auth_dialog_window.exec()
         except Exception:
             traceback.print_exc()
         else:
-            show_explorer()
+            if result == QDialog.DialogCode.Accepted:
+                show_explorer()
 
     def logout(self):
         PlanetClient.getInstance().log_out()

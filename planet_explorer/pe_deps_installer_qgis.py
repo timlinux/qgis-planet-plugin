@@ -22,7 +22,7 @@ __copyright__ = "(C) 2026 Planet Inc, https://planet.com"
 # This will get replaced with a git SHA1 when you do a git archive
 __revision__ = "$Format:%H$"
 
-import importlib.util
+import importlib.metadata
 import logging
 import os
 import platform
@@ -47,6 +47,19 @@ logging.basicConfig(level=LOG_LEVEL)
 log = logging.getLogger(__name__)
 
 
+def is_nixos() -> bool:
+    try:
+        info = platform.freedesktop_os_release()
+        return info.get("ID") == "nixos"
+    except (AttributeError, OSError):
+        # Fallback for non-Linux OSs or standard library limitations
+        return False
+
+
+def is_flatpak() -> bool:
+    return os.environ.get("FLATPAK_ID") == "org.qgis.qgis"
+
+
 class PipMissingDialog(QDialog):
     """
     Dialog shown when pip is missing in QGIS's Python environment
@@ -63,12 +76,26 @@ class PipMissingDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
+        if is_nixos() and not is_flatpak():
+            install_helper = (
+                "QGIS on NixOS requires pip to be installed as an extra python package. "
+                "See https://qgis.org/resources/installation-guide/#running-with-extra-python-packages"
+            )
+        elif is_flatpak():
+            install_helper = (
+                "To enable pip in QGIS Flatpak, run this command in your system terminal:\n\n"
+                "<code>flatpak run --command=python3 org.qgis.qgis -m ensurepip --default-pip --user</code>"
+            )
+        else:
+            install_helper = ""
+
         label = QLabel(
             "This plugin needs to install additional Python packages, "
             "but pip is not available in QGIS's Python environment:\n"
             f"{python_path}\n\n"
             "Please enable or install pip for this Python environment, "
-            "then click Retry."
+            "then click Retry. \n\n"
+            f"{install_helper}"
         )
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -148,6 +175,13 @@ class PipInstallWorker(QThread):
         super().__init__(parent)
         self.extlibs = extlibs
         self.reqs = reqs
+        self.creation_flags = self.get_creation_flags()
+
+    def get_creation_flags(self):
+        if platform.system() == "Windows":
+            return subprocess.CREATE_NO_WINDOW
+        else:
+            return 0
 
     def get_python_path(self):
         # Derived from qpip
@@ -195,11 +229,13 @@ class PipInstallWorker(QThread):
             return path
 
     def check_pip_available(self, python_path: str) -> bool:
+
         check = subprocess.run(
             [python_path, "-m", "pip", "--version"],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            creationflags=self.creation_flags,
         )  # nosec B603 -- args passed as list,
         # no shell involved; python_path is derived internally,
         # not user input
@@ -230,12 +266,14 @@ class PipInstallWorker(QThread):
                     self.extlibs,
                     req,
                 ]
+
                 subprocess.run(
                     cmd,
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    creationflags=self.creation_flags,
                 )  # nosec B603 -- args passed as list, no shell involved;
                 # python_path is derived internally, not user input
 
@@ -264,10 +302,6 @@ def read_requirements(file_path: Path) -> list[str]:
     return lines
 
 
-def is_module_available(module_name: str) -> bool:
-    return importlib.util.find_spec(module_name) is not None
-
-
 def missing_requirements(requirements: list[str]) -> list[str]:
     """
     Check if the required dependencies are missing.
@@ -278,14 +312,16 @@ def missing_requirements(requirements: list[str]) -> list[str]:
     Returns:
         list[str]: A list of missing dependencies.
     """
+    if hasattr(importlib.metadata, "invalidate_caches"):
+        importlib.metadata.invalidate_caches()
+
     missing = []
     for req in requirements:
         pkg_name = re.split(r"[<>=!~\[]", req.strip())[0].strip()
-        # for rpds-py
-        import_name = pkg_name.split("-")[0]
-        if not is_module_available(import_name):
+        try:
+            importlib.metadata.distribution(pkg_name)
+        except importlib.metadata.PackageNotFoundError:
             missing.append(req)
-
     return missing
 
 
@@ -319,7 +355,7 @@ def _run_install_attempt(extlibs: str, reqs: list[str], parent_widget=None) -> d
 
     def on_progress(step, msg):
         dlg.setLabelText(msg)
-        dlg.setValue(step - 1)
+        dlg.setValue(step)
 
     def on_ok():
         dlg.setValue(len(reqs))
@@ -340,6 +376,7 @@ def _run_install_attempt(extlibs: str, reqs: list[str], parent_widget=None) -> d
     worker.finished_ok.connect(on_ok)
     worker.finished_err.connect(on_err)
     worker.pip_missing.connect(on_pip_missing)
+    worker.finished.connect(worker.deleteLater)
     worker.start()
     loop.exec()
     dlg.close()
@@ -371,6 +408,8 @@ def ensure_deps_with_dialog(plugin_dir: str, parent_widget=None) -> bool:
     if not missing:
         return True
 
+    # If any package is missing do a reinstall of all the
+    # requirements.
     notice = DependencyNoticeDialog(reqs, parent_widget, extlibs)
     if notice.exec() != QDialog.DialogCode.Accepted:
         return False  # user cancelled, don't install
