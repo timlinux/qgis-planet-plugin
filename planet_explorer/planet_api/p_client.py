@@ -34,6 +34,7 @@ from typing import (
     Any,
     TypeVar,
 )
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import requests
 from planet import Auth, PlanetOAuthScopes, Session
@@ -492,7 +493,7 @@ class PlanetClient(QObject):
             bool: True if the client is ready for API calls.
         """
         if not self.auth:
-            self.get_auth_context()
+            return False
 
         if not self.auth_is_valid():
             return False
@@ -596,12 +597,15 @@ class PlanetClient(QObject):
         """
         Decode the API key from the OAUTH2 access token.
 
+        Uses an unverified (signature-not-checked) decode since this only
+        reads a claim from a token this client already holds and trusts —
+        it is not used to authenticate or authorize anything.
+
         Returns:
             str: API key if decode is successful.
+
         """
-        # TODO: Work around needed for QGIS to be able to authenticate
-        # a tile service url using the planet auth object.
-        hazmat_header, hazmat_body, hazmat_signature = (
+        _hazmat_header, hazmat_body, _hazmat_signature = (
             TokenValidator.hazmat_unverified_decode(self.get_access_token())
         )
         return hazmat_body["api_key"]
@@ -617,6 +621,159 @@ class PlanetClient(QObject):
         if hasattr(self, "api_key"):
             return self.api_key not in [None, ""]
         return False
+
+    def _split_qgis_uri(self, uri: str) -> tuple[str | None, str]:
+        """Split a QGIS-style data source URI into its non-url prefix and
+        embedded tile url, if present.
+
+        Args:
+            uri (str): URI to check.
+
+        Returns:
+            tuple[str | None, str]: (prefix, tile_url). ``prefix`` is None if
+            ``uri`` is not a wrapped QGIS URI (no embedded ``&url=``), in which
+            case ``tile_url`` is the input unchanged.
+        """
+        if "&url=" not in uri:
+            return None, uri
+        prefix, tile_url = uri.split("&url=", 1)
+        return prefix, tile_url
+
+    def clean_planet_tile_url(self, tile_url: str) -> str:
+        """
+        Return a Planet tile URL or QGIS planet tile URI
+        with any API key or auth-header query parameters removed.
+
+        Args:
+            tile_url (str): Basemap tile or Aseet tile URL, or QGIS URI
+                possibly containing an `api_key`` query parameter or other auth-related query
+                parameters (see ``auth_header_keys()``).
+
+        Returns:
+            str: The same tile URL with ``api_key`` and any auth-header keys
+                removed from the query string. If none are present, the URL
+                is returned unchanged.
+        """
+        prefix, tile_url = self._split_qgis_uri(tile_url)
+
+        parts = urlparse(tile_url)
+        query = parse_qs(parts.query, keep_blank_values=True)
+
+        for auth_key in self.auth_header_keys():
+            query.pop(auth_key, None)
+
+        query.pop("api_key", None)
+
+        cleaned_tile_url = urlunparse(
+            parts._replace(query=urlencode(query, doseq=True, quote_via=quote))
+        )
+
+        if prefix is not None:
+            cleaned_tile_url = f"{prefix}&url={cleaned_tile_url}"
+        return cleaned_tile_url
+
+    def auth_header_keys(self) -> list[str]:
+        """
+        Return the set of header keys that may indicate authentication
+        parameters in a Planet tile URL or QGIS layer source URI.
+
+        Includes known keys used by past plugin/SDK versions ("Authorization"
+        from planet SDK v3.6.0+, "http-header:authorization" from plugin
+        v3.0.0's QGIS URI scheme), plus, if currently logged in, whatever
+        header name the active SDK's request authenticator reports — in case
+        a future SDK version changes it.
+
+        Returns:
+            list[str]: Auth header keys to check for or strip.
+        """
+        auth_keys = ["Authorization", "http-header:authorization"]
+
+        # If logged in one can check for others if they have changed.
+        if self.auth is not None:
+            ra = self.auth._plauth.request_authenticator()
+            ra.pre_request_hook()
+            if ra._auth_header not in auth_keys:
+                log.debug(
+                    f"New authorization header key from Planet SDK: {ra._auth_header!r}. "
+                    "Add it to auth_keys in auth_header_keys()."
+                )
+                auth_keys.append(ra._auth_header)
+        return auth_keys
+
+    def extract_auth_param(self, uri: str) -> dict[str, str] | None:
+        """
+        Extract an existing auth-header key/value pair or api_key already
+        present in a url or QGIS uri, if any.
+
+        Args:
+            uri (str): URL or URI to check.
+
+        Returns:
+            dict[str, str] | None: {key: value} of the first non-empty auth
+                param found, or None if none present.
+        """
+        _, uri = self._split_qgis_uri(uri)
+
+        parts = urlparse(uri)
+        query = parse_qs(parts.query, keep_blank_values=True)
+
+        # If auth-header and api_key both in url
+        # only extract auth.
+        for auth_key in self.auth_header_keys():
+            auth_value = query.pop(auth_key, [None])[0]
+            if auth_value:
+                return {auth_key: auth_value}
+
+        api_key = query.pop("api_key", [None])[0]
+        if api_key:
+            return {"api_key": api_key}
+
+        return None
+
+    def auth_params_check(self, uri: str) -> bool:
+        """
+        Check if a url or uri contains a non-empty api key or authentication
+        parameter value.
+
+        Args:
+            uri (str): URL or URI to check.
+
+        Returns:
+            bool: True if a non-empty api key or auth header value is found.
+        """
+        return self.extract_auth_param(uri) is not None
+
+    def build_authorization_header(
+        self, auth_header_key: str | None = None, encode: bool = True
+    ) -> str | dict[str, str]:
+        """
+        Build the authorization header to use to decorate a request with authentication.
+
+        Args:
+            auth_header_key (str | None, optional): Name of the header key to use.
+                If None, defaults to the header name configured on the
+                request authenticator (e.g. "Authorization").
+            encode (bool): If True, return the header as a URL-encoded
+                "key=value" string. If False, return it as a dict. Defaults to True.
+
+        Returns:
+            str | dict[str, str]: A URL-encoded "key=value" string if encode is
+                True, otherwise a single-entry dict mapping the header name to
+                its value.
+        """
+
+        ra = self.auth._plauth.request_authenticator()
+        ra.pre_request_hook()
+        if auth_header_key is None:
+            auth_header = {ra._auth_header: ra._build_auth_header_payload()}
+        else:
+            auth_header = {auth_header_key: ra._build_auth_header_payload()}
+
+        if encode:
+            key, value = next(iter(auth_header.items()))
+            return f"{key}={quote(value, safe='')}"
+        else:
+            return auth_header
 
     async def _aget_one_mosaic(
         self, raise_on_error: bool = False
@@ -1479,7 +1636,13 @@ def tile_service_url(
         tile_url = TILE_SERVICE_URL.format(secrets.choice([0, 1, 2, 3]))
         url = f"{tile_url}/{tile_hash}/{{z}}/{{x}}/{{y}}" f"?ua={user_agent()}"
 
-    return url
+    if url is None:
+        log.debug("Unrecognized service type %r, skipping tile URL", service)
+        return None
+    else:
+        # Defensive: strip auth params in case they leaked in via tile_hash
+        p_client = PlanetClient.getInstance()
+        return p_client.clean_planet_tile_url(url)
 
 
 class AsyncRunner:

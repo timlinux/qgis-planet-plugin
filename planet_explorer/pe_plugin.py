@@ -21,9 +21,9 @@ __copyright__ = "(C) 2019 Planet Inc, https://planet.com"
 
 # This will get replaced with a git SHA1 when you do a git archive
 __revision__ = "$Format:%H$"
-
 import os
 import platform
+import re
 import sys
 import traceback
 import zipfile
@@ -653,48 +653,103 @@ class PlanetExplorer(object):
             PlanetClient.getInstance().user()["user_name"] if loggedin else ""
         )
 
+    def _scrub_project_text(self, text: str) -> str:
+        client = PlanetClient.getInstance()
+
+        # Match "key=value" up through the next delimiter that would end a
+        # value in either a raw query string or XML-escaped project file:
+        # &, ", ', or < (start of the next XML tag).
+        value_pattern = r"[^&\"'<]*"
+
+        keys_to_scrub = ["api_key", *client.auth_header_keys()]
+        for key in keys_to_scrub:
+            # Handle both the raw key and its XML/URL-escaped form (e.g.
+            # "http-header:authorization" containing a colon may appear
+            # percent- or XML-escaped depending on where it's embedded).
+            escaped_key = re.escape(key)
+            pattern = rf"{escaped_key}=(%20|{value_pattern})*"
+            text = re.sub(pattern, f"{key}=", text)
+
+        # For older projects that may have had api key still
+        # saved
+        try:
+            legacy_api_key = client.get_api_key()
+        except Exception:
+            legacy_api_key = None
+
+        if legacy_api_key:
+            text = text.replace(legacy_api_key, "")
+        return text
+
+    def _rewrite_qgs_file(self, path: str):
+        safe_path = self._safe_project_file_path(path, ".qgs")
+        with open(safe_path, encoding="utf-8") as f:
+            s = f.read()
+        with open(safe_path, "w", encoding="utf-8") as f:
+            f.write(self._scrub_project_text(s))
+
+    def _rewrite_qgz_file(self, path: str):
+        safe_path = self._safe_project_file_path(path, ".qgz")
+        tmpfilename = safe_path + ".temp"
+
+        with zipfile.ZipFile(safe_path, "r") as zin:
+            with zipfile.ZipFile(tmpfilename, "w") as zout:
+                zout.comment = zin.comment
+                for item in zin.infolist():
+                    data = zin.read(item.filename)
+
+                    if item.filename.lower().endswith(".qgs"):
+                        raw = data.decode("utf-8")
+                        data = self._scrub_project_text(raw).encode("utf-8")
+                    zout.writestr(item, data)
+
+        os.replace(tmpfilename, safe_path)
+
+    def _safe_project_file_path(self, path: str, expected_ext: str) -> str:
+        if not isinstance(path, str) or not path:
+            raise ValueError("Invalid project path")
+
+        safe_path = os.path.realpath(os.path.abspath(path))
+
+        if not os.path.isabs(safe_path):
+            raise ValueError("Path must be absolute")
+
+        if not os.path.exists(safe_path):
+            raise FileNotFoundError(safe_path)
+
+        if not safe_path.lower().endswith(expected_ext):
+            raise ValueError(f"Expected {expected_ext} project file")
+
+        return safe_path
+
+    def _resave_project_scrubbed(self):
+        try:
+            raw_path = QgsProject.instance().absoluteFilePath()
+
+            if raw_path.lower().endswith(".qgs"):
+                self._rewrite_qgs_file(raw_path)
+            elif raw_path.lower().endswith(".qgz"):
+                self._rewrite_qgz_file(raw_path)
+            else:
+                raise ValueError("Unexpected project file extension")
+        except Exception:
+            QMessageBox.warning(
+                self.iface.mainWindow(),
+                "Error saving project",
+                "There was an error while removing API keys and"
+                " authentication tokens from the QGIS project"
+                " file.\nThe project that you have just saved might contain"
+                " Planet API keys or authentication tokens in plain text.",
+            )
+
     def project_saved(self):
-        # TODO: Remove API keys from QGIS project file after saving, if any
-        if PlanetClient.getInstance().has_api_key():
+        """Removes API keys and authentication token from QGIS project.
 
-            def resave():
-                try:
-                    path = QgsProject.instance().absoluteFilePath()
-                    if path.lower().endswith(".qgs"):
-                        with open(path, encoding="utf-8") as f:
-                            s = f.read()
-                        with open(path, "w", encoding="utf-8") as f:
-                            f.write(s.replace(PlanetClient.getInstance().api_key, ""))
-                    else:
-                        tmpfilename = path + ".temp"
-                        qgsfilename = (
-                            os.path.splitext(os.path.basename(path))[0] + ".qgs"
-                        )
-                        with zipfile.ZipFile(path, "r") as zin:
-                            with zipfile.ZipFile(tmpfilename, "w") as zout:
-                                zout.comment = zin.comment
-                                for item in zin.infolist():
-                                    if not item.filename.lower().endswith(".qgs"):
-                                        zout.writestr(item, zin.read(item.filename))
-                                    else:
-                                        s = zin.read(item.filename).decode("utf-8")
-                                        s = s.replace(
-                                            PlanetClient.getInstance().api_key, ""
-                                        )
-                                        qgsfilename = item.filename
-                        os.remove(path)
-                        os.rename(tmpfilename, path)
-                        with zipfile.ZipFile(
-                            path, mode="a", compression=zipfile.ZIP_DEFLATED
-                        ) as zf:
-                            zf.writestr(qgsfilename, s)
-                except Exception:
-                    QMessageBox.warning(
-                        self.iface.mainWindow(),
-                        "Error saving project",
-                        "There was an error while removing API keys from QGIS project"
-                        " file.\nThe project that you have just saved might contain"
-                        " Planet API keys in plain text.",
-                    )
+        Post-save clean up hook to run right after user saves a QGIS project
+        and rewrites the saved project file on disk to strip out the Planet API
+        key.
+        """
+        if not PlanetClient.getInstance().client_is_setup():
+            return
 
-            QTimer.singleShot(100, resave)
+        QTimer.singleShot(100, self._resave_project_scrubbed)

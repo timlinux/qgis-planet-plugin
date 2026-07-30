@@ -39,7 +39,7 @@ from qgis.core import (
 )
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 from qgis.PyQt import uic
-from qgis.PyQt.QtCore import QObject, QRunnable, QSize, Qt, pyqtSignal
+from qgis.PyQt.QtCore import QSize, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QPixmap
 from qgis.PyQt.QtWidgets import (
     QAbstractItemView,
@@ -181,7 +181,7 @@ class PlanetInspectorDockWidget(ORDERS_MONITOR_BASE, ORDERS_MONITOR_WIDGET):
                 self.listScenes.setItemWidget(item, widget)
                 self.textBrowser.setVisible(False)
                 self.listScenes.setVisible(True)
-            except Exception as e:
+            except Exception:
                 self.textBrowser.setHtml(
                     """
                         <center><span style="color: rgb(200,0,0);">

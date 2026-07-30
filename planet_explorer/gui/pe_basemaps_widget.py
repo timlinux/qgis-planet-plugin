@@ -261,9 +261,6 @@ class BasemapsWidget(BASE, WIDGET):
     def series(self):
         if self._series is None:
             self._series = self.p_client.list_mosaic_series()
-            # response = self.p_client.list_mosaic_series()
-            # for page in response.iter():
-            #    self._series.extend(page.get().get(SERIES))
         return self._series
 
     def _apply_filter(self):
